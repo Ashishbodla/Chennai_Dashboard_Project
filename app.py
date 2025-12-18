@@ -40,7 +40,7 @@ def load_data():
     df["Plot_Number"] = df["Plot_Number"].astype(str)
     df["Plot_Size"] = pd.to_numeric(df["Plot_Size"], errors="coerce")
     df["Sold_Amount"] = pd.to_numeric(df["Sold_Amount"], errors="coerce").fillna(0)
-    df["X_pct"] = pd.to_numeric(df["X_pct"], errors="coerce") * (3742 / 4975)
+    df["X_pct"] = pd.to_numeric(df["X_pct"], errors="coerce") * (3742 / 4425)
     df["Y_pct"] = pd.to_numeric(df["Y_pct"], errors="coerce") * Y_STRETCH
     df["Sold_Date"] = pd.to_datetime(df["Sold_Date"], format="%d/%m/%y", errors="coerce")
 
@@ -194,7 +194,7 @@ with legend_col:
         lambda x: f"₹{x:,.0f}"
     )
 
-    st.dataframe(summary, hide_index=True, use_container_width=True)
+    st.dataframe(summary, hide_index=True, width='stretch')
 
 # -------------------------------------------------
 # APPLY DATE + OWNER FILTERS
@@ -277,7 +277,7 @@ with plot_col:
         margin=dict(l=0, r=0, t=10, b=0)
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # # -------------------------------------------------
 # # REFRESH
