@@ -279,9 +279,9 @@ with plot_col:
 
     st.plotly_chart(fig, use_container_width=True)
 
-# -------------------------------------------------
-# REFRESH
-# -------------------------------------------------
-if st.button("🔄 Refresh data"):
-    st.cache_data.clear()
-    st.experimental_rerun()
+# # -------------------------------------------------
+# # REFRESH
+# # -------------------------------------------------
+# if st.button("🔄 Refresh data"):
+#     st.cache_data.clear()
+#     st.experimental_rerun()
