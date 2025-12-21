@@ -243,7 +243,7 @@ with plot_col:
             mode="markers",
             marker=dict(
                 symbol="x",
-                size=3,
+                size=5,
                 color="#8B0000",
                 line=dict(width=1)
             ),
@@ -253,11 +253,11 @@ with plot_col:
     )
 
     fig.update_layout(
-        xaxis=dict(range=[0, img_width], visible=False, fixedrange=True),
+        xaxis=dict(range=[0, img_width], visible=False, fixedrange=False),
         yaxis=dict(
             range=[0, img_height],
             visible=False,
-            fixedrange=True,
+            fixedrange=False,
             scaleanchor="x"
         ),
         images=[
@@ -278,12 +278,27 @@ with plot_col:
     )
 
     # st.plotly_chart(fig, width='stretch')
+    # st.plotly_chart(
+    # fig,
+    # use_container_width=True,
+    # config={
+    #     "responsive": True,
+    #     "displayModeBar": False,
+    #     "scrollZoom": True
+    # })
     st.plotly_chart(
     fig,
     use_container_width=True,
     config={
         "responsive": True,
-        "displayModeBar": False,
-        "scrollZoom": False
-    })
+        "scrollZoom": True,          # ✅ enables pinch / scroll zoom
+        "displayModeBar": True,      # ✅ shows zoom/pan/reset icons
+        "modeBarButtonsToRemove": [
+            "lasso2d",
+            "select2d"
+        ],
+        "doubleClick": "reset"       # ✅ double-tap to reset view
+    }
+    )
+
 
