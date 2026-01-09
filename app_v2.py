@@ -20,39 +20,84 @@ st.set_page_config(
 # -------------------------------------------------
 @st.cache_data(ttl=1800)
 def load_data():
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    url = (
-        "https://docs.google.com/spreadsheets/d/"
-        "1ADwkUAqU01wxVoYEnJh2hhZVdeqaFcaOAgeUZP5P-kw"
-        "/export?format=csv"
-    )
+    try:
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        url = (
+            "https://docs.google.com/spreadsheets/d/"
+            "1ADwkUAqU01wxVoYEnJh2hhZVdeqaFcaOAgeUZP5P-kw"
+            "/export?format=csv"
+        )
 
-    with urllib.request.urlopen(url, context=ssl_context) as response:
-        csv_bytes = response.read()
+        # Add timeout and retry logic
+        max_retries = 3
+        timeout = 30  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(url, context=ssl_context, timeout=timeout) as response:
+                    csv_bytes = response.read()
+                break  # Success, exit retry loop
+            except (urllib.error.URLError, TimeoutError) as e:
+                if attempt < max_retries - 1:
+                    st.warning(f"⏳ Connection attempt {attempt + 1} failed, retrying...")
+                    continue
+                else:
+                    raise Exception(
+                        f"Failed after {max_retries} attempts. "
+                        f"Please check your internet connection or try again later. "
+                        f"Error: {str(e)}"
+                    )
 
-    df = pd.read_csv(io.BytesIO(csv_bytes))
+        df = pd.read_csv(io.BytesIO(csv_bytes))
 
-    df["Plot_Number"] = df["Plot_Number"].astype(str)
-    df["Plot_Size"] = pd.to_numeric(df["Plot_Size"], errors="coerce")
-    df["Sold_Amount"] = pd.to_numeric(df["Sold_Amount"], errors="coerce").fillna(0)
-    df["X_pixel"] = pd.to_numeric(df["X_pixel"], errors="coerce")
-    df["Y_pixel"] = pd.to_numeric(df["Y_pixel"], errors="coerce")
-    df["Sold_Date"] = pd.to_datetime(df["Sold_Date"], format="%d/%m/%y", errors="coerce")
+        # Validate required columns
+        required_cols = ["Plot_Number", "Plot_Size", "Sold_Amount", "X_pixel", "Y_pixel", "Sold_Date", "Owner_Name", "Status"]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            st.error(f"Missing columns in Google Sheet: {', '.join(missing_cols)}")
+            st.stop()
 
-    return df
+        df["Plot_Number"] = df["Plot_Number"].astype(str)
+        df["Plot_Size"] = pd.to_numeric(df["Plot_Size"], errors="coerce")
+        df["Sold_Amount"] = pd.to_numeric(df["Sold_Amount"], errors="coerce").fillna(0)
+        df["X_pixel"] = pd.to_numeric(df["X_pixel"], errors="coerce")
+        df["Y_pixel"] = pd.to_numeric(df["Y_pixel"], errors="coerce")
+        df["Sold_Date"] = pd.to_datetime(df["Sold_Date"], format="%d/%m/%y", errors="coerce")
+
+        return df
+    except Exception as e:
+        st.error(f"❌ Failed to load data from Google Sheets: {str(e)}")
+        st.info("💡 **Troubleshooting tips:**\n"
+                "- Check your internet connection\n"
+                "- Verify the Google Sheet is publicly accessible\n"
+                "- Try refreshing the page\n"
+                "- Check if Google services are available in your region")
+        st.stop()
 
 
-df = load_data()
+# Load data with spinner
+with st.spinner("📊 Loading plot data from Google Sheets..."):
+    df = load_data()
 
 # -------------------------------------------------
 # IMAGE + DIMENSIONS (CRITICAL)
 # -------------------------------------------------
-bg_image = Image.open("9.6_ACRES.jpg")
-img_width, img_height = bg_image.size
+try:
+    bg_image = Image.open("9.6_ACRES.jpg")
+    img_width, img_height = bg_image.size
+except FileNotFoundError:
+    st.error("❌ Background image '9.6_ACRES.jpg' not found in the project directory.")
+    st.stop()
 
 # Convert image coords → plot coords
 df["X_plot"] = df["X_pixel"]
 df["Y_plot"] = img_height - df["Y_pixel"]
+
+# -------------------------------------------------
+# PLOT SIZE RANGE
+# -------------------------------------------------
+min_plot_size = df["Plot_Size"].min()
+max_plot_size = df["Plot_Size"].max()
 
 # -------------------------------------------------
 # DATE FILTER
@@ -74,20 +119,58 @@ df["Owner_Color"] = df["Owner_Name"].map(owner_palette).fillna("#999999")
 owner_counts = df["Owner_Name"].value_counts().to_dict()
 
 # -------------------------------------------------
-# PAGE TITLE
+# PAGE HEADER WITH LOGO
 # -------------------------------------------------
 total_land = df["Plot_Size"].sum()
 sold_land = df[df["Status"] == "Sold"]["Plot_Size"].sum()
 sold_pct = 0 if total_land == 0 else (sold_land / total_land) * 100
 
-st.markdown(
-    f"""
-    <h2 style="text-align:center; margin-bottom:20px;">
-        Plot 1 – 9.6 Acres – Total Percentage of Land Sold {sold_pct:.2f}%
-    </h2>
-    """,
-    unsafe_allow_html=True
-)
+# Try to load logo
+try:
+    logo_image = Image.open("Gemini_Generated_logo.png")
+    logo_col, title_col = st.columns([1, 9])
+    with logo_col:
+        st.image(logo_image, width=120)
+    with title_col:
+        st.markdown(
+            f"""
+            <h2 style="text-align:center; margin-bottom:20px; margin-top:30px;">
+                Plot 1 – 9.6 Acres – Total Percentage of Land Sold {sold_pct:.2f}%
+            </h2>
+            """,
+            unsafe_allow_html=True
+        )
+except FileNotFoundError:
+    # If logo not found, just show title
+    st.markdown(
+        f"""
+        <h2 style="text-align:center; margin-bottom:20px;">
+            Plot 1 – 9.6 Acres – Total Percentage of Land Sold {sold_pct:.2f}%
+        </h2>
+        """,
+        unsafe_allow_html=True
+    )
+
+# -------------------------------------------------
+# QUICK STATS (HORIZONTAL)
+# -------------------------------------------------
+total_plots = len(df)
+sold_plots = len(df[df["Status"] == "Sold"])
+unsold_plots = total_plots - sold_plots
+sold_land_area = df[df["Status"] == "Sold"]["Plot_Size"].sum()
+remaining_land_area = df["Plot_Size"].sum() - sold_land_area
+
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("📊 Total Plots", total_plots)
+with col2:
+    st.metric("✅ Sold Plots", sold_plots)
+with col3:
+    st.metric("🟢 Available Plots", unsold_plots)
+with col4:
+    st.metric("📐 Remaining Land", f"{remaining_land_area:,.0f} sft")
+
+st.markdown("---")
 
 # -------------------------------------------------
 # LAYOUT
@@ -98,20 +181,42 @@ plot_col, legend_col = st.columns([8, 2])
 # LEGEND + FILTERS
 # -------------------------------------------------
 with legend_col:
-    st.markdown("### Filter by Sold Date")
-
+    st.markdown("### 🔍 Filters")
+    
+    # Reset filters button
+    if st.button("🔄 Reset All Filters", use_container_width=True):
+        st.rerun()
+    
+    st.markdown("**Sold Date Range**")
     date_range = st.slider(
         "Sold Date Range",
         min_value=min_date.date(),
         max_value=max_date.date(),
-        value=(min_date.date(), max_date.date())
+        value=(min_date.date(), max_date.date()),
+        label_visibility="collapsed"
     )
-
+    
     start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+    st.caption(f"📅 {start_date.date()} to {end_date.date()}")
+    
+    st.markdown("**Plot Size Range (sft)**")
+    size_range = st.slider(
+        "Plot Size Range",
+        min_value=float(min_plot_size),
+        max_value=float(max_plot_size),
+        value=(float(min_plot_size), float(max_plot_size)),
+        label_visibility="collapsed"
+    )
+    
+    min_size, max_size = size_range
+    st.caption(f"📐 {min_size:,.0f} to {max_size:,.0f} sft")
+    
+    st.markdown("**Include Unsold Plots**")
+    include_unsold = st.checkbox("Show unsold (available) plots", value=True)
 
     st.markdown("---")
-    st.markdown("### Legend")
-    st.markdown("**Owner (toggle visibility)**")
+    st.markdown("### 🏷️ Legend")
+    st.markdown("**Owners (toggle visibility)**")
 
     selected_owners = []
 
@@ -134,78 +239,53 @@ with legend_col:
                 selected_owners.append(owner)
 
     st.markdown("---")
-    st.markdown("**Status**")
+    st.markdown("**Plot Status**")
     st.markdown(
         """
-        <div style="display:flex;align-items:center;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
             <span style="font-size:18px;font-weight:bold;color:#8B0000;margin-right:8px;">✖</span>
             <span>Sold Plot</span>
         </div>
         """,
         unsafe_allow_html=True
     )
-    st.markdown("---")
-    # -------------------------------------------------
-    # SOLD SUMMARY TABLE (INCLUDES ZERO ROWS)
-    # -------------------------------------------------
-    st.markdown("**Sold Summary (Live)**")
-
-    # Base table = all selected owners
-    base = pd.DataFrame({"Owner": selected_owners})
-
-    # Sold-only aggregation
-    sold_agg = (
-        df[
-            (df["Status"] == "Sold") &
-            (df["Owner_Name"].isin(selected_owners))
-        ]
-        .groupby("Owner_Name", as_index=False)
-        .agg(
-            Sold_Plots=("Plot_Number", "count"),
-            Total_Sold_Amount=("Sold_Amount", "sum")
-        )
-        .rename(columns={"Owner_Name": "Owner"})
-    )
-
-    # Left join so unsold owners remain
-    summary = base.merge(sold_agg, on="Owner", how="left")
-
-    summary["Sold_Plots"] = summary["Sold_Plots"].fillna(0).astype(int)
-    summary["Total_Sold_Amount"] = summary["Total_Sold_Amount"].fillna(0)
-
-    # TOTAL ROW
-    total_row = pd.DataFrame({
-        "Owner": ["TOTAL"],
-        "Sold_Plots": [summary["Sold_Plots"].sum()],
-        "Total_Sold_Amount": [summary["Total_Sold_Amount"].sum()]
-    })
-
-    summary = pd.concat([summary, total_row], ignore_index=True)
-
-    # Formatting
-    summary["Total_Sold_Amount"] = summary["Total_Sold_Amount"].map(
-        lambda x: f"₹{x:,.0f}"
-    )
-
-    st.dataframe(summary, hide_index=True, width='stretch')
+    
+    # st.markdown("---")
 
 
 # -------------------------------------------------
 # APPLY FILTERS
 # -------------------------------------------------
-df_filtered = df[
-    (
-        df["Sold_Date"].isna() |
-        ((df["Sold_Date"] >= start_date) & (df["Sold_Date"] <= end_date))
-    ) &
-    (df["Owner_Name"].isin(selected_owners))
-]
+# Build filter conditions
+date_filter = (
+    (df["Sold_Date"].isna() & include_unsold) |
+    ((df["Sold_Date"] >= start_date) & (df["Sold_Date"] <= end_date))
+)
+
+owner_filter = df["Owner_Name"].isin(selected_owners)
+size_filter = (df["Plot_Size"] >= min_size) & (df["Plot_Size"] <= max_size)
+
+df_filtered = df[date_filter & owner_filter & size_filter]
 
 # -------------------------------------------------
 # SCATTER + IMAGE (PIXEL PERFECT)
 # -------------------------------------------------
 with plot_col:
     fig = go.Figure()
+    
+    # Dynamic marker size scaling - larger sizes to remain visible when zoomed
+    if len(df_filtered) > 0:
+        # Use square root scaling for better visibility range
+        min_marker = 12
+        max_marker = 40
+        size_range = df_filtered["Plot_Size"].max() - df_filtered["Plot_Size"].min()
+        if size_range > 0:
+            normalized_sizes = (df_filtered["Plot_Size"] - df_filtered["Plot_Size"].min()) / size_range
+            marker_sizes = min_marker + (normalized_sizes ** 0.5) * (max_marker - min_marker)
+        else:
+            marker_sizes = [30] * len(df_filtered)
+    else:
+        marker_sizes = []
 
     fig.add_trace(
         go.Scatter(
@@ -213,17 +293,18 @@ with plot_col:
             y=df_filtered["Y_plot"],
             mode="markers",
             marker=dict(
-                size=df_filtered["Plot_Size"] / 75,
+                size=marker_sizes,
                 color=df_filtered["Owner_Color"],
                 opacity=0.75,
-                line=dict(width=1, color="white")
+                line=dict(width=2, color="white"),
+                sizemode='diameter'
             ),
             customdata=df_filtered[
                 ["Plot_Number", "Plot_Size", "Owner_Name", "Status", "Sold_Date", "Sold_Amount"]
             ],
             hovertemplate=(
                 "<b>Plot %{customdata[0]}</b><br>"
-                "Size: %{customdata[1]} sft<br>"
+                "Size: %{customdata[1]:.0f} sft<br>"
                 "Owner: %{customdata[2]}<br>"
                 "Status: %{customdata[3]}<br>"
                 "Sold Date: %{customdata[4]|%d %b %Y}<br>"
@@ -243,9 +324,9 @@ with plot_col:
             mode="markers",
             marker=dict(
                 symbol="x",
-                size=5,
+                size=9,
                 color="#8B0000",
-                line=dict(width=1)
+                line=dict(width=2)
             ),
             hoverinfo="skip",
             showlegend=False
@@ -287,18 +368,72 @@ with plot_col:
     #     "scrollZoom": True
     # })
     st.plotly_chart(
-    fig,
-    use_container_width=True,
-    config={
-        "responsive": True,
-        "scrollZoom": True,          # ✅ enables pinch / scroll zoom
-        "displayModeBar": True,      # ✅ shows zoom/pan/reset icons
-        "modeBarButtonsToRemove": [
-            "lasso2d",
-            "select2d"
-        ],
-        "doubleClick": "reset"       # ✅ double-tap to reset view
-    }
+        fig,
+        use_container_width=True,
+        config={
+            "responsive": True,
+            "scrollZoom": False,         # ✅ disables scroll zoom
+            "displayModeBar": True,      # ✅ shows zoom/pan/reset icons
+            "modeBarButtonsToRemove": [
+                "lasso2d",
+                "select2d"
+            ],
+            "doubleClick": "reset",      # ✅ double-tap to reset view
+            "toImageButtonOptions": {
+                "format": "png",
+                "filename": "plot_dashboard",
+                "height": 900,
+                "width": 1600,
+                "scale": 1
+            }
+        }
     )
+    st.caption("💡 Use **scroll to pan** | **two-finger pinch to zoom** | **double-click to reset**")
+
+# -------------------------------------------------
+# SOLD SUMMARY TABLE (BELOW IMAGE)
+# -------------------------------------------------
+st.markdown("---")
+st.markdown("### 💰 Sold Summary (Live)")
+
+# Base table = all selected owners
+base = pd.DataFrame({"Owner": selected_owners})
+
+# Sold-only aggregation
+sold_agg = (
+    df[
+        (df["Status"] == "Sold") &
+        (df["Owner_Name"].isin(selected_owners))
+    ]
+    .groupby("Owner_Name", as_index=False)
+    .agg(
+        Sold_Plots=("Plot_Number", "count"),
+        Total_Sold_Amount=("Sold_Amount", "sum")
+    )
+    .rename(columns={"Owner_Name": "Owner"})
+)
+
+# Left join so unsold owners remain
+summary = base.merge(sold_agg, on="Owner", how="left")
+
+summary["Sold_Plots"] = summary["Sold_Plots"].fillna(0).astype(int)
+summary["Total_Sold_Amount"] = summary["Total_Sold_Amount"].fillna(0)
+
+# TOTAL ROW
+total_sold_amount = summary["Total_Sold_Amount"].sum()
+total_row = pd.DataFrame({
+    "Owner": ["**TOTAL**"],
+    "Sold_Plots": [int(summary["Sold_Plots"].sum())],
+    "Total_Sold_Amount": [total_sold_amount]
+})
+
+summary = pd.concat([summary, total_row], ignore_index=True)
+
+# Formatting
+summary["Total_Sold_Amount"] = summary["Total_Sold_Amount"].map(
+    lambda x: f"₹{x:,.0f}"
+)
+
+st.dataframe(summary, hide_index=True, use_container_width=True)
 
 
