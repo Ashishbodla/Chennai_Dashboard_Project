@@ -18,7 +18,7 @@ st.set_page_config(
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=1800)
 def load_data(sheet_gid=None):
     try:
         ssl_context = ssl.create_default_context(cafile=certifi.where())
