@@ -18,7 +18,7 @@ st.set_page_config(
 # -------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=5)
 def load_data(sheet_gid=None):
     try:
         ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -439,11 +439,12 @@ def render_dashboard(df, bg_image_path, plot_title, owner_palette):
 # -------------------------------------------------
 # MAIN APP WITH TABS
 # -------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📍 Plot 1 – 9.6 Acres", 
     "📍 Plot 2 – 9.66 Acres",
     "📍 Plot 3 – 9.01 Acres",
-    "📍 Plot 4 – 30.85 Acres"
+    "📍 Plot 4 – 30.85 Acres",
+    "📍 Plot 5 – 9.95 Acres"
 ])
 
 with tab1:
@@ -498,3 +499,20 @@ with tab4:
     }
     
     render_dashboard(df4, "30.85.jpg", "Plot 4 – 30.85 Acres", owner_palette_4)
+
+with tab5:
+    # Load data for Plot 5 (9.95 Acres sheet)
+    with st.spinner("📊 Loading Plot 5 data from Google Sheets..."):
+        df5 = load_data(sheet_gid="1629137058")
+    
+    owner_palette_5 = {
+        "SAUKYADA INFRA LLP": "#ff7f0e",
+        "SHREE KAMAKSHI VENTURES": "#7f7f7f",
+        "SREEKARI DEVELOPERS": "#8c564b",
+        "SV INFRA AND PROJECTS": "#2ca02c",
+        "BRINDAVAN ASSETS AND HOLDINGS": "#1f77b4",
+        "NV RAMANA RAO": "#e377c2",
+        "VIRUPAKSHA INFRA DEVELOPERS": "#d62728"
+    }
+    
+    render_dashboard(df5, "9.95.jpg", "Plot 5 – 9.95 Acres", owner_palette_5)
