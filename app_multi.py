@@ -12,7 +12,8 @@ from PIL import Image
 # -------------------------------------------------
 st.set_page_config(
     layout="wide",
-    page_title="Arcadia Aerocity Dashboard"
+    page_title="Arcadia Aerocity Dashboard",
+    page_icon="Gemini_Generated_logo.png"
 )
 
 # -------------------------------------------------
